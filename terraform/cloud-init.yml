@@ -1,0 +1,55 @@
+#cloud-config
+
+package_update: true
+package_upgrade: true
+
+packages:
+  - git
+  - curl
+  - ufw
+
+users:
+  - name: deployer
+    groups: sudo, docker
+    shell: /bin/bash
+    sudo: ['ALL=(ALL) NOPASSWD:ALL']
+    lock_passwd: true
+
+runcmd:
+  # Install and configure Docker
+  - apt-get update
+  - apt-get install -y docker.io
+  - systemctl daemon-reload
+  - systemctl start docker
+  - systemctl enable docker
+
+  # Install Docker Compose
+  - curl -L "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+  - chmod +x /usr/local/bin/docker-compose
+  - ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
+
+  # Configure UFW
+  - ufw allow 22/tcp
+  - ufw allow 80/tcp
+  - ufw allow 443/tcp
+  - ufw --force enable
+
+  # Create swap if needed
+  - |
+    if [ ! -f /swapfile ]; then
+      fallocate -l 1G /swapfile
+      chmod 600 /swapfile
+      mkswap /swapfile
+      swapon /swapfile
+      echo '/swapfile none swap sw 0 0' >> /etc/fstab
+    fi
+
+  # Optimize swap
+  - echo 'vm.swappiness=10' >> /etc/sysctl.conf
+  - sysctl -p
+
+write_files:
+  - path: /etc/instance-starter-provisioned
+    content: |
+      Provisioned on $(date)
+    permissions: '0644'

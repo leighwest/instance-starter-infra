@@ -1,0 +1,3 @@
+vultr_api_key       = "your-vultr-api-key-here"
+your_ip             = "your.public.ip.address"
+ssh_public_key_path = "~/.ssh/id_rsa.pub"
