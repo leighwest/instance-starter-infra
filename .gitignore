@@ -11,3 +11,10 @@ terraform.tfvars
 
 # Environment
 .env
+
+# Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~

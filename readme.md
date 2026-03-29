@@ -6,6 +6,13 @@ Terraform configuration for deploying the Instance Starter application to Vultr.
 
 This repository contains Infrastructure as Code (IaC) for provisioning a Vultr VPS to host the [Instance Starter](https://github.com/yourusername/instance_starter) Django application - a web interface for managing EC2 instance start/stop operations.
 
+## Production Deployment
+
+**Current Server:** 139.84.194.76 (Vultr Melbourne)  
+**Deployed:** March 28, 2026  
+**Status:** Active  
+**Application:** http://139.84.194.76
+
 ## Architecture
 
 - **Provider:** Vultr
