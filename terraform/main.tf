@@ -38,7 +38,19 @@ resource "vultr_instance" "instance_starter" {
   activation_email = false
   
   ssh_key_ids = [vultr_ssh_key.main.id]
-  user_data   = file("${path.module}/cloud-init.yml")
+
+  user_data = templatefile("${path.module}/cloud-init.yml", {
+  db_name                   = var.db_name
+  db_user                   = var.db_user
+  db_password               = var.db_password
+  django_secret_key         = var.django_secret_key
+  django_allowed_hosts      = var.django_allowed_hosts
+  django_superuser_username = var.django_superuser_username
+  django_superuser_email    = var.django_superuser_email
+  django_superuser_password = var.django_superuser_password
+  app_repo_url              = "https://github.com/leighwest/instance-starter"
+  app_branch                = "main"
+})
   
   tags = ["instance-starter", "production"]
 }

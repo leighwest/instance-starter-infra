@@ -1,3 +1,14 @@
-vultr_api_key       = "your-vultr-api-key-here"
-your_ip             = "your.public.ip.address"
-ssh_public_key_path = "~/.ssh/id_rsa.pub"
+vultr_api_key             = "your-vultr-api-key-here"
+your_ip                   = "your.public.ip.address"
+ssh_public_key_path       = "~/.ssh/id_rsa.pub"
+
+django_secret_key          = "your-django-secret-key"
+django_allowed_hosts       = "YOUR_SERVER_IP,localhost,127.0.0.1"
+
+db_name                    = "instance_starter"
+db_user                    = "instance_starter_user"
+db_password                = "strong-random-password"
+
+django_superuser_username  = "admin"
+django_superuser_email     = "your@email.com"
+django_superuser_password  = "strong-admin-password"

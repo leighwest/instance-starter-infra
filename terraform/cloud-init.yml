@@ -7,6 +7,7 @@ packages:
   - git
   - curl
   - ufw
+  - nginx
 
 users:
   - name: deployer
@@ -28,6 +29,45 @@ runcmd:
   - chmod +x /usr/local/bin/docker-compose
   - ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
 
+  # Write Nginx config
+  - mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
+  - |
+    cat > /etc/nginx/sites-available/instance-starter << 'EOF'
+upstream django {
+    server localhost:8000;
+}
+
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    '' close;
+}
+
+server {
+    listen 80;
+    server_name _;
+
+    location / {
+        proxy_pass http://django;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /static/ {
+        alias /home/deployer/instance-starter/staticfiles/;
+    }
+
+    location /ws/ {
+        proxy_pass http://django;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $host;
+    }
+}
+EOF
+
   # Configure UFW
   - ufw allow 22/tcp
   - ufw allow 80/tcp
@@ -48,8 +88,68 @@ runcmd:
   - echo 'vm.swappiness=10' >> /etc/sysctl.conf
   - sysctl -p
 
+  # Clone app repo
+  - mkdir -p /home/deployer/instance-starter
+  - git clone -b ${app_branch} ${app_repo_url} /home/deployer/instance-starter
+  - chown -R deployer:deployer /home/deployer/instance-starter
+
+  # Move .env into place
+  - mv /tmp/app.env /home/deployer/instance-starter/.env
+  - chown deployer:deployer /home/deployer/instance-starter/.env
+
+  # Start app
+  - cd /home/deployer/instance-starter && docker-compose up -d --build
+
+  # Wait for database to be ready
+  - |
+    cd /home/deployer/instance-starter
+    MAX_RETRIES=30
+    COUNT=0
+    until docker-compose exec -T db pg_isready -U ${db_user} -d ${db_name}; do
+      COUNT=$((COUNT + 1))
+      if [ "$COUNT" -ge "$MAX_RETRIES" ]; then
+        echo "ERROR: Database did not become ready in time."
+        exit 1
+      fi
+      sleep 2
+    done
+
+  # Django setup
+  - cd /home/deployer/instance-starter && docker-compose exec -T web python manage.py migrate --noinput
+  - cd /home/deployer/instance-starter && docker-compose exec -T web python manage.py collectstatic --noinput
+  - cd /home/deployer/instance-starter && docker-compose exec -T web python manage.py ensure_superuser
+
+  # Fix static files permissions for Nginx
+  - chmod 755 /home/deployer
+  - chmod -R 755 /home/deployer/instance-starter/staticfiles
+
+  # Configure Nginx
+  - ln -sf /etc/nginx/sites-available/instance-starter /etc/nginx/sites-enabled/instance-starter
+  - rm -f /etc/nginx/sites-enabled/default
+  - nginx -t
+  - systemctl enable nginx
+  - systemctl restart nginx
+
 write_files:
   - path: /etc/instance-starter-provisioned
     content: |
       Provisioned on $(date)
     permissions: '0644'
+  - path: /tmp/app.env
+    owner: deployer:deployer
+    permissions: '0600'
+    content: |
+      DATABASE_NAME=${db_name}
+      DATABASE_USER=${db_user}
+      DATABASE_PASSWORD=${db_password}
+      DATABASE_HOST=db
+      DATABASE_PORT=5432
+      DJANGO_SECRET_KEY=${django_secret_key}
+      DEBUG=False
+      ALLOWED_HOSTS=${django_allowed_hosts}
+      REDIS_URL=redis://redis:6379
+      CELERY_BROKER_URL=redis://redis:6379/0
+      CELERY_RESULT_BACKEND=redis://redis:6379/0
+      DJANGO_SUPERUSER_USERNAME=${django_superuser_username}
+      DJANGO_SUPERUSER_EMAIL=${django_superuser_email}
+      DJANGO_SUPERUSER_PASSWORD=${django_superuser_password}
