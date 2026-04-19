@@ -4,14 +4,15 @@ Terraform configuration for deploying the Instance Starter application to Vultr.
 
 ## Overview
 
-This repository contains Infrastructure as Code (IaC) for provisioning a Vultr VPS to host the [Instance Starter](https://github.com/yourusername/instance_starter) Django application - a web interface for managing EC2 instance start/stop operations.
+This repository contains Infrastructure as Code (IaC) for provisioning a Vultr VPS to host the [Instance Starter](https://github.com/leighwest/instance-starter) Django application - a web interface for managing EC2 instance start/stop operations.
 
 ## Production Deployment
 
-**Current Server:** 67.219.108.6 (Vultr Melbourne)  
-**Deployed:** March 28, 2026  
+**Reserved IP:** 139.84.203.187 (permanent — survives reprovisioning)  
+**Deployed:** March 2026  
 **Status:** Active  
-**Application:** http://139.84.203.110
+**Application:** http://139.84.203.187  
+**CI/CD:** GitHub Actions (self-hosted runner on server)
 
 ## Architecture
 
@@ -19,35 +20,52 @@ This repository contains Infrastructure as Code (IaC) for provisioning a Vultr V
 - **Region:** Melbourne (mel)
 - **Server:** 1GB RAM / 1 vCPU
 - **OS:** Ubuntu 22.04 LTS
-- **Configuration:** Cloud-init for automated setup
-- **Services:** Docker, Docker Compose
+- **Configuration:** Cloud-init for zero-touch bootstrap
+- **Services:** Docker, Docker Compose, Nginx
+- **CI/CD:** Self-hosted GitHub Actions runner
+
+```
+Internet (port 80/443)
+    ↓
+Nginx (reverse proxy)
+    ├─→ /static/ → staticfiles/
+    ├─→ /ws/ → localhost:8000 (WebSocket)
+    └─→ / → localhost:8000 (Django)
+        ↓
+Docker Compose
+    ├─ web (Django/Daphne)
+    ├─ db (PostgreSQL 14)
+    ├─ redis (Redis 7)
+    ├─ celery_worker
+    └─ celery_beat
+```
 
 ## Prerequisites
 
 - [Terraform](https://www.terraform.io/downloads) >= 1.0
 - Vultr account with API access
-- SSH key pair
+- ed25519 SSH key pair (generated in WSL)
 
 ## Setup
 
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/yourusername/instance_starter_infra.git
-cd instance_starter_infra/terraform
+git clone https://github.com/leighwest/instance-starter-infra.git
+cd instance-starter-infra/terraform
 ```
 
-### 2. Get Vultr API Key
-
-1. Log into [Vultr](https://my.vultr.com/)
-2. Account → API → Personal Access Token
-3. Generate new token and copy it
-
-### 3. Get Your Public IP
+### 2. Generate SSH Key
 
 ```bash
-curl ifconfig.me
+ssh-keygen -t ed25519 -C "instance-starter-deploy" -f ~/.ssh/instance_starter_deploy
 ```
+
+### 3. Get Vultr API Key
+
+1. Log into [Vultr](https://my.vultr.com/)
+2. Click your name (top right) → **API**
+3. Click **Create API Key** and copy it immediately — only shown once
 
 ### 4. Configure Variables
 
@@ -58,8 +76,12 @@ cp terraform.tfvars.example terraform.tfvars
 Edit `terraform.tfvars` with your actual values:
 
 ```hcl
-vultr_api_key       = "your-actual-vultr-api-key"
-ssh_public_key_path = "~/.ssh/instance_starter_deploy.pub"
+vultr_api_key             = "your-vultr-api-key"
+ssh_public_key_path       = "~/.ssh/instance_starter_deploy.pub"
+django_secret_key         = "your-django-secret-key"
+db_password               = "your-db-password"
+django_superuser_password = "your-superuser-password"
+django_superuser_email    = "your-email"
 ```
 
 ⚠️ **Never commit `terraform.tfvars`** - it contains secrets!
@@ -75,163 +97,156 @@ terraform init
 ### Deploy Infrastructure
 
 ```bash
-# Preview changes
 terraform plan
-
-# Apply changes
 terraform apply
-
-# Type 'yes' when prompted
-```
-
-### Get Server IP
-
-```bash
-terraform output instance_ip
 ```
 
 ### SSH to Server
 
 ```bash
-ssh root@$(terraform output -raw instance_ip)
+# As deployer (day-to-day)
+ssh -i ~/.ssh/instance_starter_deploy deployer@<reserved_ip>
 
-# Or use the deployer user (created by cloud-init)
-ssh deployer@$(terraform output -raw instance_ip)
+# As root (emergencies only)
+ssh -i ~/.ssh/instance_starter_deploy root@<reserved_ip>
+```
+
+Or use the output directly:
+
+```bash
+$(terraform output -raw ssh_command)
 ```
 
 ### Destroy Infrastructure
 
 ```bash
 terraform destroy
+```
 
-# Type 'yes' when prompted
+⚠️ **Known issue:** Reserved IP detach fails during destroy. Manually delete the reserved IP from the Vultr dashboard, then run:
+
+```bash
+terraform state rm vultr_reserved_ip.main
+terraform apply
 ```
 
 ## What Gets Provisioned
 
 ### Server Configuration
 
-- **Packages:** Docker, Docker Compose, Git, Curl
-- **Users:** `deployer` user with sudo and Docker access
-- **Swap:** 1GB swap file (important for 1GB RAM)
-- **Firewall:** UFW enabled
+- **Packages:** Docker, Docker Compose v2, Nginx, Git
+- **Users:** `deployer` with sudo and Docker access, SSH key auth only
+- **Swap:** 1GB swap file
+- **Firewall:** UFW + Vultr firewall group
 
 ### Firewall Rules
 
-- **Port 22 (SSH):** Your IP only
+- **Port 22 (SSH):** Open to all — secured by ed25519 key, password auth disabled
 - **Port 80 (HTTP):** Open to all
 - **Port 443 (HTTPS):** Open to all
 
-### Cloud-init Actions
+### Cloud-init Bootstrap (zero-touch)
 
-The server runs the following on first boot:
+1. Installs Docker, Docker Compose, Nginx
+2. Creates `deployer` user, writes SSH authorized_keys
+3. Disables password authentication
+4. Configures swap
+5. Clones app repo, writes `.env`
+6. Starts Docker Compose stack
+7. Runs migrations, collectstatic, ensure_superuser
+8. Configures and enables Nginx
 
-1. Updates all packages
-2. Installs Docker and Docker Compose
-3. Creates deployer user
-4. Configures 1GB swap file
-5. Sets up firewall rules
+## Post-Provisioning: GitHub Actions Runner
 
-## Deploying the Application
+The self-hosted runner must be set up manually after each `terraform apply`. SSH into the server as deployer and follow the runner setup instructions from:
 
-After infrastructure is provisioned:
+**GitHub repo → Settings → Actions → Runners → New self-hosted runner**
+
+Select Linux / x64, then run the provided commands as the `deployer` user. Install as a systemd service:
 
 ```bash
-# SSH to server
-ssh deployer@YOUR_SERVER_IP
-
-# Clone application
-git clone https://github.com/yourusername/instance_starter.git
-cd instance_starter
-
-# Create .env file
-nano .env
-# (add your production environment variables)
-
-# Start services
-docker-compose up -d
-
-# Check status
-docker-compose ps
-docker-compose logs -f
+cd ~/actions-runner
+sudo ./svc.sh install deployer
+sudo ./svc.sh start
+sudo ./svc.sh status
 ```
+
+The runner will survive reboots and listen for jobs automatically.
+
+## CI/CD Pipeline
+
+Pushing to `main` in the app repo triggers the GitHub Actions workflow:
+
+1. Checks out code on the runner
+2. `git pull` latest changes
+3. `docker-compose down && docker-compose up -d`
+4. Runs migrations and collectstatic
+
+No secrets required in GitHub — the runner executes locally on the server.
 
 ## File Structure
 
 ```
-instance_starter_infra/
+instance-starter-infra/
 ├── terraform/
-│   ├── main.tf                   # Main Terraform configuration
+│   ├── main.tf                   # Vultr resources
 │   ├── variables.tf              # Variable definitions
-│   ├── outputs.tf                # Output values
-│   ├── cloud-init.yml            # Server initialization script
-│   ├── terraform.tfvars          # Your secrets (gitignored)
-│   └── terraform.tfvars.example  # Template for variables
-├── .gitignore                    # Git ignore rules
-└── README.md                     # This file
+│   ├── outputs.tf                # Reserved IP, SSH command, site URL
+│   ├── cloud-init.yml            # Zero-touch server bootstrap
+│   ├── terraform.tfvars          # Secrets (gitignored)
+│   └── terraform.tfvars.example  # Safe-to-commit template
+├── nginx/
+│   └── instance-starter.conf     # Nginx reverse proxy config
+├── .gitignore
+└── README.md
 ```
 
 ## Troubleshooting
 
 ### Can't SSH to Server
 
-1. Check firewall rules allow your current IP:
-
 ```bash
-   curl ifconfig.me  # Compare to your_ip in terraform.tfvars
+# Verify server is up
+curl http://<reserved_ip>
+
+# Check cloud-init completed
+ssh -i ~/.ssh/instance_starter_deploy root@<reserved_ip>
+tail /var/log/cloud-init-output.log
 ```
 
-2. Wait 2-3 minutes after `terraform apply` for cloud-init to complete
-
-3. Check instance status in [Vultr Console](https://my.vultr.com/)
-
-### Cloud-init Status
+### Cloud-init Failed
 
 ```bash
-# SSH to server, then check cloud-init status
-cloud-init status
-
-# View cloud-init logs
-sudo cat /var/log/cloud-init-output.log
+cat /var/log/cloud-init-output.log | grep -i error
 ```
 
-### Terraform State Issues
+### Docker Issues
 
 ```bash
-# If state is corrupted or out of sync
-terraform refresh
+cd /home/deployer/instance-starter
+docker-compose ps
+docker-compose logs -f web
+```
 
-# Or re-import resources manually
-terraform import vultr_instance.instance_starter YOUR_INSTANCE_ID
+### GitHub Actions Runner Not Picking Up Jobs
+
+```bash
+cd /home/deployer/actions-runner
+sudo ./svc.sh status
+sudo ./svc.sh start
 ```
 
 ## Security Notes
 
-- ✅ SSH access restricted to your IP only
+- ✅ Password authentication disabled (`PasswordAuthentication no`)
+- ✅ SSH access via ed25519 key only
+- ✅ Dedicated deploy key (`instance_starter_deploy`) separate from personal keys
 - ✅ Secrets in `terraform.tfvars` are gitignored
-- ✅ Firewall (UFW) enabled by default
-- ⚠️ Remember to update SSH rules when your IP changes
-- ⚠️ Keep your Vultr API key secure
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
-
-## License
-
-MIT
+- ✅ Vultr firewall group attached to instance
+- ✅ Self-hosted runner — no SSH secrets stored in GitHub
+- ⚠️ Keep your Vultr API key secure and rotate regularly
+- ⚠️ Vultr API ACL should be restricted to your IP where possible
 
 ## Related Projects
 
-- [Instance Starter Application](https://github.com/yourusername/instance_starter) - The Django app that runs on this infrastructure
-
-## Support
-
-For issues related to:
-
-- **Infrastructure provisioning:** Open an issue in this repo
-- **Application deployment:** See the [instance_starter](https://github.com/yourusername/instance_starter) repo
-- **Vultr platform:** Contact [Vultr Support](https://www.vultr.com/support/)
+- [Instance Starter Application](https://github.com/leighwest/instance-starter) - The Django app that runs on this infrastructure
