@@ -17,6 +17,9 @@ users:
     lock_passwd: true
 
 runcmd:
+  # Directory needs to exist before authorized_keys are created
+  - mkdir -p /home/deployer/.ssh
+
   # Install and configure Docker
   - apt-get update
   - apt-get install -y docker.io
@@ -25,48 +28,8 @@ runcmd:
   - systemctl enable docker
 
   # Install Docker Compose
-  - curl -L "https://github.com/docker/compose/releases/download/v2.24.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-  - chmod +x /usr/local/bin/docker-compose
-  - ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
-
-  # Write Nginx config
-  - mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
-  - |
-    cat > /etc/nginx/sites-available/instance-starter << 'EOF'
-upstream django {
-    server localhost:8000;
-}
-
-map $http_upgrade $connection_upgrade {
-    default upgrade;
-    '' close;
-}
-
-server {
-    listen 80;
-    server_name _;
-
-    location / {
-        proxy_pass http://django;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-
-    location /static/ {
-        alias /home/deployer/instance-starter/staticfiles/;
-    }
-
-    location /ws/ {
-        proxy_pass http://django;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection $connection_upgrade;
-        proxy_set_header Host $host;
-    }
-}
-EOF
+  - apt-get install -y docker-compose-v2
+  - ln -s /usr/libexec/docker/cli-plugins/docker-compose /usr/local/bin/docker-compose
 
   # Configure UFW
   - ufw allow 22/tcp
@@ -88,10 +51,15 @@ EOF
   - echo 'vm.swappiness=10' >> /etc/sysctl.conf
   - sysctl -p
 
+  # Harden SSH
+  - sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
+  - systemctl restart sshd
+
   # Clone app repo
   - mkdir -p /home/deployer/instance-starter
   - git clone -b ${app_branch} ${app_repo_url} /home/deployer/instance-starter
   - chown -R deployer:deployer /home/deployer/instance-starter
+  - chown -R deployer:deployer /home/deployer/.ssh
 
   # Move .env into place
   - mv /tmp/app.env /home/deployer/instance-starter/.env
@@ -124,6 +92,7 @@ EOF
   - chmod -R 755 /home/deployer/instance-starter/staticfiles
 
   # Configure Nginx
+  - mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
   - ln -sf /etc/nginx/sites-available/instance-starter /etc/nginx/sites-enabled/instance-starter
   - rm -f /etc/nginx/sites-enabled/default
   - nginx -t
@@ -136,7 +105,6 @@ write_files:
       Provisioned on $(date)
     permissions: '0644'
   - path: /tmp/app.env
-    owner: deployer:deployer
     permissions: '0600'
     content: |
       DATABASE_NAME=${db_name}
@@ -153,3 +121,12 @@ write_files:
       DJANGO_SUPERUSER_USERNAME=${django_superuser_username}
       DJANGO_SUPERUSER_EMAIL=${django_superuser_email}
       DJANGO_SUPERUSER_PASSWORD=${django_superuser_password}
+  - path: /home/deployer/.ssh/authorized_keys
+    permissions: '0600'
+    content: |
+      ${deployer_ssh_public_key}
+  - path: /etc/nginx/sites-available/instance-starter
+    owner: root:root
+    permissions: '0644'
+    content: |
+      ${nginx_config}

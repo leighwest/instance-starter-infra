@@ -4,26 +4,16 @@ variable "vultr_api_key" {
   sensitive   = true
 }
 
-variable "your_ip" {
-  description = "Your IP for SSH access"
-  type        = string
-}
-
 variable "ssh_public_key_path" {
   description = "Path to SSH public key"
   type        = string
-  default     = "~/.ssh/id_ed25519.pub"
+  default     = "~/.ssh/github_actions_deploy.pub"
 }
 
 variable "django_secret_key" {
   description = "Django SECRET_KEY."
   type        = string
   sensitive   = true
-}
-
-variable "django_allowed_hosts" {
-  description = "Comma-separated ALLOWED_HOSTS (server IP, any domain, localhost)."
-  type        = string
 }
 
 variable "db_name" {

@@ -8,10 +8,10 @@ This repository contains Infrastructure as Code (IaC) for provisioning a Vultr V
 
 ## Production Deployment
 
-**Current Server:** 139.84.194.76 (Vultr Melbourne)  
+**Current Server:** 67.219.108.6 (Vultr Melbourne)  
 **Deployed:** March 28, 2026  
 **Status:** Active  
-**Application:** http://139.84.194.76
+**Application:** http://139.84.203.110
 
 ## Architecture
 
@@ -59,8 +59,7 @@ Edit `terraform.tfvars` with your actual values:
 
 ```hcl
 vultr_api_key       = "your-actual-vultr-api-key"
-your_ip             = "your.actual.ip.address"
-ssh_public_key_path = "~/.ssh/id_rsa.pub"
+ssh_public_key_path = "~/.ssh/instance_starter_deploy.pub"
 ```
 
 ⚠️ **Never commit `terraform.tfvars`** - it contains secrets!
