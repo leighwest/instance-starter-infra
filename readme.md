@@ -11,7 +11,7 @@ This repository contains Infrastructure as Code (IaC) for provisioning a Vultr V
 **Reserved IP:** 139.84.203.187 (permanent — survives reprovisioning)  
 **Deployed:** March 2026  
 **Status:** Active  
-**Application:** http://139.84.203.187  
+**Application:** https://instance-starter.leighwest.dev  
 **CI/CD:** GitHub Actions (self-hosted runner on server)
 
 ## Architecture
@@ -21,13 +21,13 @@ This repository contains Infrastructure as Code (IaC) for provisioning a Vultr V
 - **Server:** 1GB RAM / 1 vCPU
 - **OS:** Ubuntu 22.04 LTS
 - **Configuration:** Cloud-init for zero-touch bootstrap
-- **Services:** Docker, Docker Compose, Nginx
+- **Services:** Docker, Docker Compose, Nginx, Certbot
 - **CI/CD:** Self-hosted GitHub Actions runner
 
 ```
 Internet (port 80/443)
     ↓
-Nginx (reverse proxy)
+Nginx (reverse proxy + SSL termination)
     ├─→ /static/ → staticfiles/
     ├─→ /ws/ → localhost:8000 (WebSocket)
     └─→ / → localhost:8000 (Django)
@@ -81,7 +81,8 @@ ssh_public_key_path       = "~/.ssh/instance_starter_deploy.pub"
 django_secret_key         = "your-django-secret-key"
 db_password               = "your-db-password"
 django_superuser_password = "your-superuser-password"
-django_superuser_email    = "your-email"
+django_superuser_email    = "your@email.com"
+certbot_email             = "your@email.com"
 ```
 
 ⚠️ **Never commit `terraform.tfvars`** - it contains secrets!
@@ -101,20 +102,22 @@ terraform plan
 terraform apply
 ```
 
+Cloud-init handles the full bootstrap automatically:
+
+1. Installs Docker, Docker Compose, Nginx, Certbot
+2. Creates `deployer` user with SSH key auth only
+3. Writes `.env`, clones app repo, starts Docker Compose stack
+4. Runs migrations, collectstatic, ensure_superuser
+5. Configures Nginx and obtains SSL certificate from Let's Encrypt
+
 ### SSH to Server
 
 ```bash
 # As deployer (day-to-day)
-ssh -i ~/.ssh/instance_starter_deploy deployer@<reserved_ip>
+ssh -i ~/.ssh/instance_starter_deploy deployer@139.84.203.187
 
 # As root (emergencies only)
-ssh -i ~/.ssh/instance_starter_deploy root@<reserved_ip>
-```
-
-Or use the output directly:
-
-```bash
-$(terraform output -raw ssh_command)
+ssh -i ~/.ssh/instance_starter_deploy root@139.84.203.187
 ```
 
 ### Destroy Infrastructure
@@ -134,20 +137,21 @@ terraform apply
 
 ### Server Configuration
 
-- **Packages:** Docker, Docker Compose v2, Nginx, Git
+- **Packages:** Docker, Docker Compose v2, Nginx, Certbot, Git
 - **Users:** `deployer` with sudo and Docker access, SSH key auth only
 - **Swap:** 1GB swap file
 - **Firewall:** UFW + Vultr firewall group
+- **SSL:** Let's Encrypt certificate via Certbot, auto-renewal via systemd timer
 
 ### Firewall Rules
 
 - **Port 22 (SSH):** Open to all — secured by ed25519 key, password auth disabled
-- **Port 80 (HTTP):** Open to all
+- **Port 80 (HTTP):** Open to all — redirects to HTTPS
 - **Port 443 (HTTPS):** Open to all
 
 ### Cloud-init Bootstrap (zero-touch)
 
-1. Installs Docker, Docker Compose, Nginx
+1. Installs Docker, Docker Compose, Nginx, Certbot
 2. Creates `deployer` user, writes SSH authorized_keys
 3. Disables password authentication
 4. Configures swap
@@ -155,6 +159,7 @@ terraform apply
 6. Starts Docker Compose stack
 7. Runs migrations, collectstatic, ensure_superuser
 8. Configures and enables Nginx
+9. Obtains SSL certificate, configures HTTPS and HTTP → HTTPS redirect
 
 ## Post-Provisioning: GitHub Actions Runner
 
@@ -206,11 +211,8 @@ instance-starter-infra/
 ### Can't SSH to Server
 
 ```bash
-# Verify server is up
-curl http://<reserved_ip>
-
 # Check cloud-init completed
-ssh -i ~/.ssh/instance_starter_deploy root@<reserved_ip>
+ssh -i ~/.ssh/instance_starter_deploy root@139.84.203.187
 tail /var/log/cloud-init-output.log
 ```
 
@@ -236,6 +238,14 @@ sudo ./svc.sh status
 sudo ./svc.sh start
 ```
 
+### SSL Certificate
+
+```bash
+certbot certificates          # list certificates and expiry
+certbot renew --dry-run       # test auto-renewal
+systemctl status certbot.timer
+```
+
 ## Security Notes
 
 - ✅ Password authentication disabled (`PasswordAuthentication no`)
@@ -244,6 +254,8 @@ sudo ./svc.sh start
 - ✅ Secrets in `terraform.tfvars` are gitignored
 - ✅ Vultr firewall group attached to instance
 - ✅ Self-hosted runner — no SSH secrets stored in GitHub
+- ✅ HTTPS enforced — HTTP redirects to HTTPS
+- ✅ Let's Encrypt certificate with automatic renewal
 - ⚠️ Keep your Vultr API key secure and rotate regularly
 - ⚠️ Vultr API ACL should be restricted to your IP where possible
 
