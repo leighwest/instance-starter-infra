@@ -51,3 +51,14 @@ variable "django_superuser_password" {
   type        = string
   sensitive   = true
 }
+
+variable "domain" {
+  description = "Domain name for the application and SSL certificate."
+  type        = string
+  default     = "instance-starter.leighwest.dev"
+}
+
+variable "certbot_email" {
+  description = "Email address for Let's Encrypt certificate notifications."
+  type        = string
+}

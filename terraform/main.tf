@@ -50,7 +50,7 @@ resource "vultr_instance" "instance_starter" {
   db_user                   = var.db_user
   db_password               = var.db_password
   django_secret_key         = var.django_secret_key
-  django_allowed_hosts      = vultr_reserved_ip.main.subnet
+  django_allowed_hosts      = "${vultr_reserved_ip.main.subnet},${var.domain},localhost,127.0.0.1"
   django_superuser_username = var.django_superuser_username
   django_superuser_email    = var.django_superuser_email
   django_superuser_password = var.django_superuser_password
@@ -58,6 +58,8 @@ resource "vultr_instance" "instance_starter" {
   app_branch                = "main"
   nginx_config              = local.nginx_config
   deployer_ssh_public_key   = file(pathexpand(var.ssh_public_key_path))
+  domain                    = var.domain
+  certbot_email             = var.certbot_email
 })
   
   tags = ["instance-starter", "production"]

@@ -10,3 +10,6 @@ db_password                = "strong-random-password"
 django_superuser_username  = "admin"
 django_superuser_email     = "your@email.com"
 django_superuser_password  = "strong-admin-password"
+
+domain                     = "instance-starter.leighwest.dev"
+certbot_email              = "your@email.com"

@@ -99,6 +99,10 @@ runcmd:
   - systemctl enable nginx
   - systemctl restart nginx
 
+  # Obtain SSL certificate
+  - apt-get install -y certbot python3-certbot-nginx
+  - certbot --nginx -d ${domain} --non-interactive --agree-tos -m ${certbot_email} --redirect
+
 write_files:
   - path: /etc/instance-starter-provisioned
     content: |
