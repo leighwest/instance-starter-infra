@@ -46,6 +46,9 @@ resource "vultr_instance" "instance_starter" {
   ssh_key_ids = [vultr_ssh_key.main.id]
 
   user_data = templatefile("${path.module}/cloud-init.yml", {
+  aws_access_key_id         = var.aws_access_key_id
+  aws_secret_access_key     = var.aws_secret_access_key
+  aws_region                = var.aws_region
   db_name                   = var.db_name
   db_user                   = var.db_user
   db_password               = var.db_password

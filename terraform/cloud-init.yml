@@ -111,6 +111,9 @@ write_files:
   - path: /tmp/app.env
     permissions: '0600'
     content: |
+      AWS_ACCESS_KEY_ID=${aws_access_key_id}
+      AWS_SECRET_ACCESS_KEY=${aws_secret_access_key}
+      AWS_REGION=${aws_region}
       CSRF_TRUSTED_ORIGINS=https://${domain}
       DATABASE_NAME=${db_name}
       DATABASE_USER=${db_user}

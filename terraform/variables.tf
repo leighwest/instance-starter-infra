@@ -4,6 +4,16 @@ variable "vultr_api_key" {
   sensitive   = true
 }
 
+variable "aws_access_key_id" {
+  sensitive = true
+}
+
+variable "aws_secret_access_key" {
+  sensitive = true
+}
+
+variable "aws_region" {}
+
 variable "ssh_public_key_path" {
   description = "Path to SSH public key"
   type        = string
