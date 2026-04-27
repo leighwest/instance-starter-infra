@@ -111,6 +111,7 @@ write_files:
   - path: /tmp/app.env
     permissions: '0600'
     content: |
+      CSRF_TRUSTED_ORIGINS=https://${domain}
       DATABASE_NAME=${db_name}
       DATABASE_USER=${db_user}
       DATABASE_PASSWORD=${db_password}
