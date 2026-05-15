@@ -86,6 +86,7 @@ runcmd:
   - cd /home/deployer/instance-starter && docker-compose exec -T web python manage.py migrate --noinput
   - cd /home/deployer/instance-starter && docker-compose exec -T web python manage.py collectstatic --noinput
   - cd /home/deployer/instance-starter && docker-compose exec -T web python manage.py ensure_superuser
+  - cd /home/deployer/instance-starter && docker-compose exec -T web python manage.py sync_instances
 
   # Fix static files permissions for Nginx
   - chmod 755 /home/deployer
