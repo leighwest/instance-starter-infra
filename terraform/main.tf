@@ -4,6 +4,10 @@ terraform {
       source  = "vultr/vultr"
       version = "~> 2.0"
     }
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
   }
 }
 
@@ -64,6 +68,10 @@ resource "vultr_instance" "instance_starter" {
   domain                    = var.domain
   certbot_email             = var.certbot_email
 })
+
+  lifecycle {
+    ignore_changes = [user_data]
+  }
   
   tags = ["instance-starter", "production"]
 }
