@@ -105,8 +105,8 @@ runcmd:
   - systemctl restart nginx
 
   # Obtain SSL certificate
-  # - apt-get install -y certbot python3-certbot-nginx
-  # - certbot --nginx -d ${domain} --non-interactive --agree-tos -m ${certbot_email} --redirect
+  - apt-get install -y certbot python3-certbot-nginx
+  - certbot --nginx -d ${domain} --non-interactive --agree-tos -m ${certbot_email} --redirect
 
   # Install GitHub Actions runner
   - mkdir -p /home/deployer/actions-runner
