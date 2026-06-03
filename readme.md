@@ -83,6 +83,8 @@ db_password               = "your-db-password"
 django_superuser_password = "your-superuser-password"
 django_superuser_email    = "your@email.com"
 certbot_email             = "your@email.com"
+ghcr_pat                  = "your-github-classic-pat-with-read-packages-scope"
+github_runner_pat         = "your-github-classic-pat-with-repo-scope"
 ```
 
 ⚠️ **Never commit `terraform.tfvars`** - it contains secrets!
@@ -156,36 +158,30 @@ terraform apply
 3. Disables password authentication
 4. Configures swap
 5. Clones app repo, writes `.env`
-6. Starts Docker Compose stack
-7. Runs migrations, collectstatic, ensure_superuser
-8. Configures and enables Nginx
-9. Obtains SSL certificate, configures HTTPS and HTTP → HTTPS redirect
+6. Authenticates with GHCR and pulls Docker image
+7. Starts Docker Compose stack
+8. Runs migrations, collectstatic, ensure_superuser
+9. Configures and enables Nginx
+10. Obtains SSL certificate, configures HTTPS and HTTP → HTTPS redirect
+11. Registers and starts GitHub Actions runner as systemd service
 
-## Post-Provisioning: GitHub Actions Runner
+## GitHub Actions Runner
 
-The self-hosted runner must be set up manually after each `terraform apply`. SSH into the server as deployer and follow the runner setup instructions from:
-
-**GitHub repo → Settings → Actions → Runners → New self-hosted runner**
-
-Select Linux / x64, then run the provided commands as the `deployer` user. Install as a systemd service:
+Runner registration is handled automatically during provisioning — cloud-init fetches a registration token from the GitHub API and registers the runner using `config.sh --replace`, then installs and starts it as a systemd service. No manual steps required after `terraform apply`.
 
 ```bash
-cd ~/actions-runner
-sudo ./svc.sh install deployer
-sudo ./svc.sh start
+# Runner management (on server)
+cd /home/deployer/actions-runner
 sudo ./svc.sh status
+sudo ./svc.sh start
+sudo ./svc.sh stop
 ```
-
-The runner will survive reboots and listen for jobs automatically.
 
 ## CI/CD Pipeline
 
-Pushing to `main` in the app repo triggers the GitHub Actions workflow:
+Pushing to `main` in the app repo triggers a two-job GitHub Actions workflow. The first job runs on a GitHub-hosted runner, builds the Docker image, and pushes it to GHCR. The second job runs on the self-hosted runner on the server, pulls the new image, and redeploys.
 
-1. Checks out code on the runner
-2. `git pull` latest changes
-3. `docker-compose down && docker-compose up -d`
-4. Runs migrations and collectstatic
+The build job runs on a GitHub-hosted runner deliberately — the Vultr instance has 1GB RAM which is insufficient for a Docker build. Only the deploy step runs on the server.
 
 No secrets required in GitHub — the runner executes locally on the server.
 
@@ -254,6 +250,7 @@ systemctl status certbot.timer
 - ✅ Secrets in `terraform.tfvars` are gitignored
 - ✅ Vultr firewall group attached to instance
 - ✅ Self-hosted runner — no SSH secrets stored in GitHub
+- ✅ GHCR authentication automated via cloud-init — no manual PAT setup required
 - ✅ HTTPS enforced — HTTP redirects to HTTPS
 - ✅ Let's Encrypt certificate with automatic renewal
 - ⚠️ Keep your Vultr API key secure and rotate regularly
