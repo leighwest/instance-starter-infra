@@ -65,15 +65,19 @@ runcmd:
   - mv /tmp/app.env /home/deployer/instance-starter/.env
   - chown deployer:deployer /home/deployer/instance-starter/.env
 
+  # Authenticate with GHCR
+  - su - deployer -c "echo ${ghcr_pat} | docker login ghcr.io -u ${github_username} --password-stdin"
+
   # Start app
-  - cd /home/deployer/instance-starter && docker-compose up -d --build
+  - cd /home/deployer/instance-starter && docker-compose -f docker-compose.yaml pull
+  - cd /home/deployer/instance-starter && docker-compose -f docker-compose.yaml up -d
 
   # Wait for database to be ready
   - |
     cd /home/deployer/instance-starter
     MAX_RETRIES=30
     COUNT=0
-    until docker-compose exec -T db pg_isready -U ${db_user} -d ${db_name}; do
+    until docker-compose -f docker-compose.yaml exec -T db pg_isready -U ${db_user} -d ${db_name}; do
       COUNT=$((COUNT + 1))
       if [ "$COUNT" -ge "$MAX_RETRIES" ]; then
         echo "ERROR: Database did not become ready in time."
@@ -83,10 +87,10 @@ runcmd:
     done
 
   # Django setup
-  - cd /home/deployer/instance-starter && docker-compose exec -T web python manage.py migrate --noinput
-  - cd /home/deployer/instance-starter && docker-compose exec -T web python manage.py collectstatic --noinput
-  - cd /home/deployer/instance-starter && docker-compose exec -T web python manage.py ensure_superuser
-  - cd /home/deployer/instance-starter && docker-compose exec -T web python manage.py sync_instances
+  - cd /home/deployer/instance-starter && docker-compose -f docker-compose.yaml exec -T web python manage.py migrate --noinput
+  - cd /home/deployer/instance-starter && docker-compose -f docker-compose.yaml exec -T web python manage.py collectstatic --noinput
+  - cd /home/deployer/instance-starter && docker-compose -f docker-compose.yaml exec -T web python manage.py ensure_superuser
+  - cd /home/deployer/instance-starter && docker-compose -f docker-compose.yaml exec -T web python manage.py sync_instances
 
   # Fix static files permissions for Nginx
   - chmod 755 /home/deployer
@@ -101,8 +105,29 @@ runcmd:
   - systemctl restart nginx
 
   # Obtain SSL certificate
-  - apt-get install -y certbot python3-certbot-nginx
-  - certbot --nginx -d ${domain} --non-interactive --agree-tos -m ${certbot_email} --redirect
+  # - apt-get install -y certbot python3-certbot-nginx
+  # - certbot --nginx -d ${domain} --non-interactive --agree-tos -m ${certbot_email} --redirect
+
+  # Install GitHub Actions runner
+  - mkdir -p /home/deployer/actions-runner
+  - curl -o /home/deployer/actions-runner/actions-runner-linux-x64-2.323.0.tar.gz -L https://github.com/actions/runner/releases/download/v2.323.0/actions-runner-linux-x64-2.323.0.tar.gz
+  - tar xzf /home/deployer/actions-runner/actions-runner-linux-x64-2.323.0.tar.gz -C /home/deployer/actions-runner
+  - chown -R deployer:deployer /home/deployer/actions-runner
+
+  # Register runner
+  - |
+    REG_TOKEN=$(curl -s -X POST \
+      -H "Authorization: token ${github_runner_pat}" \
+      -H "Accept: application/vnd.github.v3+json" \
+      https://api.github.com/repos/leighwest/instance-starter/actions/runners/registration-token \
+      | python3 -c "import sys, json; print(json.load(sys.stdin)['token'])")
+    su - deployer -c "cd /home/deployer/actions-runner && ./config.sh --url https://github.com/leighwest/instance-starter --token $REG_TOKEN --unattended --name instance-starter-runner --labels self-hosted --replace"
+
+  # Install and start runner as systemd service
+  - |
+    cd /home/deployer/actions-runner
+    ./svc.sh install deployer
+    ./svc.sh start
 
 write_files:
   - path: /etc/instance-starter-provisioned

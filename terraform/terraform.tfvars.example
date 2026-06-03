@@ -1,10 +1,10 @@
 vultr_api_key             = "your-vultr-api-key-here"
 ssh_public_key_path       = "~/.ssh/id_rsa.pub"
-django_secret_key          = "your-django-secret-key"
+django_secret_key         = "your-django-secret-key"
 
-aws_access_key_id     = "your-aws-access-key-id"
-aws_secret_access_key = "your-aws-secret-access-key"
-aws_region            = "ap-southeast-4"
+aws_access_key_id         = "your-aws-access-key-id"
+aws_secret_access_key     = "your-aws-secret-access-key"
+aws_region                = "ap-southeast-4"
 
 db_name                    = "instance_starter"
 db_user                    = "instance_starter_user"
@@ -16,3 +16,6 @@ django_superuser_password  = "strong-admin-password"
 
 domain                     = "instance-starter.leighwest.dev"
 certbot_email              = "your@email.com"
+
+ghcr_pat                   = "your-github-classic-pat-with-read-packages-scope"
+github_runner_pat          = "your-github-classic-pat-with-read-repo-scope"

@@ -43,44 +43,47 @@ resource "vultr_ssh_key" "main" {
 
 # Server 
 resource "vultr_instance" "instance_starter" {
-  plan                = "vc2-1c-1gb"  
-  region              = data.vultr_region.melbourne.id
-  os_id               = 1743
-  label               = "instance-starter"
-  hostname            = "instance-starter"
-  enable_ipv6         = true
-  backups             = "disabled"
-  ddos_protection     = false
-  activation_email    = false
-  firewall_group_id   = vultr_firewall_group.main.id
-  reserved_ip_id      = vultr_reserved_ip.main.id
-  
+  plan              = "vc2-1c-1gb"
+  region            = data.vultr_region.melbourne.id
+  os_id             = 1743
+  label             = "instance-starter"
+  hostname          = "instance-starter"
+  enable_ipv6       = true
+  backups           = "disabled"
+  ddos_protection   = false
+  activation_email  = false
+  firewall_group_id = vultr_firewall_group.main.id
+  reserved_ip_id    = vultr_reserved_ip.main.id
+
   ssh_key_ids = [vultr_ssh_key.main.id]
 
   user_data = templatefile("${path.module}/cloud-init.yml", {
-  aws_access_key_id         = var.aws_access_key_id
-  aws_secret_access_key     = var.aws_secret_access_key
-  aws_region                = var.aws_region
-  db_name                   = var.db_name
-  db_user                   = var.db_user
-  db_password               = var.db_password
-  django_secret_key         = var.django_secret_key
-  django_allowed_hosts      = "${vultr_reserved_ip.main.subnet},${var.domain},localhost,127.0.0.1"
-  django_superuser_username = var.django_superuser_username
-  django_superuser_email    = var.django_superuser_email
-  django_superuser_password = var.django_superuser_password
-  app_repo_url              = "https://github.com/leighwest/instance-starter"
-  app_branch                = "main"
-  nginx_config              = local.nginx_config
-  deployer_ssh_public_key   = file(pathexpand(var.ssh_public_key_path))
-  domain                    = var.domain
-  certbot_email             = var.certbot_email
-})
+    aws_access_key_id         = var.aws_access_key_id
+    aws_secret_access_key     = var.aws_secret_access_key
+    aws_region                = var.aws_region
+    db_name                   = var.db_name
+    db_user                   = var.db_user
+    db_password               = var.db_password
+    django_secret_key         = var.django_secret_key
+    django_allowed_hosts      = "${vultr_reserved_ip.main.subnet},${var.domain},localhost,127.0.0.1"
+    django_superuser_username = var.django_superuser_username
+    django_superuser_email    = var.django_superuser_email
+    django_superuser_password = var.django_superuser_password
+    app_repo_url              = "https://github.com/leighwest/instance-starter"
+    app_branch                = "main"
+    nginx_config              = local.nginx_config
+    deployer_ssh_public_key   = file(pathexpand(var.ssh_public_key_path))
+    domain                    = var.domain
+    certbot_email             = var.certbot_email
+    ghcr_pat                  = var.ghcr_pat
+    github_username           = "leighwest"
+    github_runner_pat         = var.github_runner_pat
+  })
 
   lifecycle {
     ignore_changes = [user_data]
   }
-  
+
   tags = ["instance-starter", "production"]
 }
 

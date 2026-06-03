@@ -72,3 +72,15 @@ variable "certbot_email" {
   description = "Email address for Let's Encrypt certificate notifications."
   type        = string
 }
+
+variable "ghcr_pat" {
+  description = "GitHub classic PAT with read:packages scope for pulling images from GHCR."
+  type        = string
+  sensitive   = true
+}
+
+variable "github_runner_pat" {
+  description = "GitHub classic PAT with repo scope for registering the self-hosted Actions runner."
+  type        = string
+  sensitive   = true
+}
