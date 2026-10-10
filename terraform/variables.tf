@@ -4,12 +4,10 @@ variable "vultr_api_key" {
   sensitive   = true
 }
 
-variable "aws_access_key_id" {
-  sensitive = true
-}
-
-variable "aws_secret_access_key" {
-  sensitive = true
+variable "aws_profile" {
+  description = "Local AWS CLI profile used by the AWS provider and the toy-instance stop command. No access keys are stored in this stack."
+  type        = string
+  default     = "admin"
 }
 
 variable "aws_region" {}

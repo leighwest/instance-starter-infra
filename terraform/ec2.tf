@@ -1,7 +1,6 @@
 provider "aws" {
-  access_key = var.aws_access_key_id
-  secret_key = var.aws_secret_access_key
-  region     = var.aws_region
+  profile = var.aws_profile
+  region  = var.aws_region
 }
 
 # -------------------------------------------------
@@ -131,10 +130,6 @@ resource "null_resource" "stop_instances" {
   depends_on = [time_sleep.wait_for_user_data]
 
   provisioner "local-exec" {
-    command = "aws ec2 stop-instances --instance-ids ${aws_instance.toy_1.id} ${aws_instance.toy_2.id} --region ${var.aws_region}"
-    environment = {
-      AWS_ACCESS_KEY_ID     = var.aws_access_key_id
-      AWS_SECRET_ACCESS_KEY = var.aws_secret_access_key
-    }
+    command = "aws ec2 stop-instances --instance-ids ${aws_instance.toy_1.id} ${aws_instance.toy_2.id} --region ${var.aws_region} --profile ${var.aws_profile}"
   }
 }
